@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WVU & Hockey Weekly Checklist</title>
+  <title>WVU & ACHA D3 Weekly Checklist</title>
   <style>
     :root {
       --wvu-blue: #002855;
@@ -13,7 +13,6 @@
       --text: #1C2024;
       --muted: #606770;
       --border: #E1E4E8;
-      --success: #2E7D32;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -39,7 +38,7 @@
     h1 { margin: 0 0 6px 0; font-size: 1.4rem; }
     p { margin: 0; font-size: 0.9rem; opacity: 0.85; }
 
-    .controls {
+    .controls, .add-task-box {
       background: var(--card-bg);
       padding: 14px 16px;
       border-radius: 10px;
@@ -56,13 +55,28 @@
       font-size: 0.95rem;
       font-weight: 600;
     }
-    select, button {
+    select, button, input[type="text"] {
       font-family: inherit;
-      padding: 6px 12px;
+      padding: 8px 12px;
       border-radius: 6px;
       border: 1px solid var(--border);
       background: var(--bg);
       font-weight: 500;
+    }
+    .add-task-form {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .add-task-form input[type="text"] {
+      flex-grow: 1;
+      min-width: 160px;
+    }
+    .add-btn {
+      background: var(--wvu-blue);
+      color: white;
+      border: none;
+      font-weight: 600;
       cursor: pointer;
     }
     .reset-btn {
@@ -73,6 +87,7 @@
       width: 100%;
       padding: 10px;
       margin-top: 4px;
+      cursor: pointer;
     }
 
     .day-card {
@@ -87,9 +102,6 @@
       font-weight: 700;
       color: var(--wvu-blue);
       margin-bottom: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
     .badge {
       font-size: 0.75rem;
@@ -97,6 +109,11 @@
       border-radius: 12px;
       background: #EBF3FE;
       color: #0055B8;
+      margin-left: 6px;
+    }
+    .badge-custom {
+      background: #FFF3C4;
+      color: #7A5200;
     }
 
     .task-list { list-style: none; padding: 0; margin: 0; }
@@ -118,27 +135,21 @@
       text-decoration: line-through;
       color: var(--muted);
     }
-    .note {
-      font-size: 0.8rem;
-      color: var(--muted);
-      font-style: italic;
-      margin-top: 4px;
-    }
   </style>
 </head>
 <body>
 
 <div class="app">
   <header>
-    <h1>WVU & Hockey Weekly Checklist</h1>
-    <p>Keep track of classes, practices, assignments, and study hours.</p>
+    <h1>WVU & ACHA D3 Weekly Checklist</h1>
+    <p>Personal schedule for classes, hockey, study hours, and workouts.</p>
   </header>
 
   <div class="controls">
     <div class="control-group">
       <span>Weekend Schedule:</span>
       <select id="weekendSelect" onchange="updateWeekendType()">
-        <option value="hockey">Hockey Games Weekend</option>
+        <option value="hockey">ACHA D3 Games Weekend</option>
         <option value="off">Off Weekend</option>
       </select>
     </div>
@@ -149,6 +160,21 @@
     <button class="reset-btn" onclick="resetWeek()">Reset Checklist for New Week</button>
   </div>
 
+  <div class="add-task-box">
+    <strong style="font-size: 0.95rem;">+ Add One-Off Task For This Week</strong>
+    <div class="add-task-form">
+      <input type="text" id="customTaskInput" placeholder="e.g. Math HW due Thursday night...">
+      <select id="customTaskDay">
+        <option value="Monday">Monday</option>
+        <option value="Tuesday">Tuesday</option>
+        <option value="Wednesday">Wednesday</option>
+        <option value="Thursday">Thursday</option>
+        <option value="Friday">Friday</option>
+      </select>
+      <button class="add-btn" onclick="addCustomTask()">Add</button>
+    </div>
+  </div>
+
   <div id="checklist"></div>
 </div>
 
@@ -156,7 +182,8 @@
   let state = JSON.parse(localStorage.getItem('wvu_checklist')) || {
     chapelWeek: true,
     weekendType: 'hockey',
-    checks: {}
+    checks: {},
+    customTasks: [] // Stores temporary weekly tasks
   };
 
   function saveState() {
@@ -181,9 +208,30 @@
     render();
   }
 
+  function addCustomTask() {
+    const input = document.getElementById('customTaskInput');
+    const text = input.value.trim();
+    const day = document.getElementById('customTaskDay').value;
+
+    if (!text) return;
+
+    const newTask = {
+      id: 'custom_' + Date.now(),
+      day: day,
+      text: text
+    };
+
+    if (!state.customTasks) state.customTasks = [];
+    state.customTasks.push(newTask);
+    input.value = '';
+    saveState();
+    render();
+  }
+
   function resetWeek() {
-    if (confirm("Reset all checked items for a new week?")) {
+    if (confirm("Reset all checked items and delete temporary weekly tasks for a new week?")) {
       state.checks = {};
+      state.customTasks = []; // Wipes temporary tasks for the new week
       saveState();
       render();
     }
@@ -193,78 +241,99 @@
     document.getElementById('weekendSelect').value = state.weekendType;
     document.getElementById('chapelBtn').innerText = state.chapelWeek ? "Chapel This Week (Active)" : "No Chapel This Week";
 
-    const mondayDone = !!state.checks['mon_study'];
+    const mondayStudyDone = !!state.checks['mon_study'];
 
-    const schedule = [
+    const baseSchedule = [
       {
         day: 'Monday',
         tasks: [
-          { id: 'mon_study', text: 'Go to study hours' }
+          { id: 'mon_bus', text: 'Intro to Business class' },
+          { id: 'mon_math', text: 'Math 124 class' },
+          { id: 'mon_comm', text: 'Comm 104 class' },
+          { id: 'mon_study', text: 'Go to study hours' },
+          { id: 'mon_workout', text: 'Workout session' }
         ]
       },
       {
         day: 'Tuesday',
         tasks: [
-          { id: 'tue_practice', text: 'Go to hockey practice' },
-          { id: 'tue_nof1', text: 'Complete N-of-1 assignment' }
+          { id: 'tue_entre', text: 'Intro to Entrepreneurship class' },
+          { id: 'tue_nutr', text: 'Nutrition class' },
+          { id: 'tue_nof1', text: 'Complete N-of-1 assignment' },
+          { id: 'tue_practice', text: 'Go to ACHA D3 hockey practice' },
+          { id: 'tue_workout', text: 'Workout session' }
         ]
       },
       {
         day: 'Wednesday',
         tasks: [
+          { id: 'wed_bus', text: 'Intro to Business class' },
+          { id: 'wed_math', text: 'Math 124 class' },
+          { id: 'wed_comm', text: 'Comm 104 class' },
+          { id: 'wed_bcor', text: 'BCOR 191 class' },
           ...(state.chapelWeek ? [{ id: 'wed_chapel', text: 'Go to Chapel', badge: 'Every Other Week' }] : []),
-          { 
-            id: 'wed_study', 
-            text: mondayDone ? 'Study hours completed on Monday (Backup not needed)' : 'Backup Study Hours (Monday hours were missed)',
-            disabled: mondayDone 
-          }
+          ...(!mondayStudyDone ? [{ id: 'wed_study', text: 'Backup Study Hours (Monday missed)' }] : []),
+          { id: 'wed_workout', text: 'Workout session' }
         ]
       },
       {
         day: 'Thursday',
         tasks: [
-          { id: 'thu_hw', text: 'Complete homework for hockey team' },
-          { id: 'thu_practice', text: 'Go to hockey practice' }
+          { id: 'thu_entre', text: 'Intro to Entrepreneurship class' },
+          { id: 'thu_nutr', text: 'Nutrition class' },
+          { id: 'thu_hw', text: 'Complete homework for ACHA D3 hockey team' },
+          { id: 'thu_practice', text: 'Go to ACHA D3 hockey practice' }
         ]
       },
       {
         day: 'Friday',
         tasks: [
+          { id: 'fri_bus', text: 'Intro to Business class' },
+          { id: 'fri_math', text: 'Math 124 class' },
           { id: 'fri_hw', text: 'Complete Friday night homework' },
           { 
             id: 'fri_prep', 
             text: state.weekendType === 'hockey' 
-              ? 'Prepare gear & pack for Hockey Weekend' 
+              ? 'Go to storage unit & pack gear for ACHA D3 hockey games' 
               : 'Prepare and organize for Off Weekend' 
-          }
+          },
+          { id: 'fri_workout', text: 'Workout session' }
         ]
       }
     ];
 
     let html = '';
-    schedule.forEach(d => {
+    baseSchedule.forEach(d => {
+      // Find any custom tasks added for this day
+      const dayCustomTasks = (state.customTasks || []).filter(ct => ct.day === d.day).map(ct => ({
+        id: ct.id,
+        text: ct.text,
+        badge: 'This Week Only'
+      }));
+
+      const allDayTasks = [...d.tasks, ...dayCustomTasks];
+
       html += `<div class="day-card">
         <div class="day-title">${d.day}</div>
         <ul class="task-list">`;
       
-      d.tasks.forEach(t => {
+      allDayTasks.forEach(t => {
         const isChecked = !!state.checks[t.id];
-        const isDisabled = t.disabled;
+        const isCustomBadge = t.badge === 'This Week Only';
         html += `
           <li class="task-item ${isChecked ? 'completed' : ''}">
             <input type="checkbox" 
                    ${isChecked ? 'checked' : ''} 
-                   ${isDisabled ? 'disabled' : ''} 
                    onclick="toggleCheck('${t.id}')">
             <span class="task-text">${t.text}</span>
-            ${t.badge ? `<span class="badge">${t.badge}</span>` : ''}
+            ${t.badge ? `<span class="badge ${isCustomBadge ? 'badge-custom' : ''}">${t.badge}</span>` : ''}
           </li>`;
       });
 
       html += `</ul></div>`;
     });
 
-    document.getElementById('checklist').appendChild ? document.getElementById('checklist').innerHTML = html : null;
+    document.getElementById('checklist').innerHTML = html;
   }
 
   render();
